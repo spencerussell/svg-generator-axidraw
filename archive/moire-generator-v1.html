@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moiré SVG Generator — Axidraw</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f5;
+    color: #111;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* --- Sidebar --- */
+  .sidebar {
+    width: 360px;
+    min-width: 360px;
+    background: #fff;
+    padding: 20px;
+    overflow-y: auto;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sidebar h1 {
+    font-size: 17px;
+    color: #000;
+    margin-bottom: 2px;
+    letter-spacing: -0.2px;
+    font-weight: 700;
+  }
+  .sidebar .subtitle {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 12px;
+  }
+
+  fieldset {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 10px 12px 8px;
+    background: #fafafa;
+  }
+  legend {
+    font-size: 11px;
+    font-weight: 700;
+    color: #000;
+    padding: 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .control {
+    margin: 6px 0 2px;
+  }
+  .control .control-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    margin-bottom: 3px;
+    color: #555;
+  }
+  .control .control-header .label-text {
+    flex: 1;
+  }
+  .control .control-header .num-input {
+    width: 58px;
+    padding: 2px 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: inherit;
+    text-align: right;
+    color: #000;
+    background: #fff;
+    font-variant-numeric: tabular-nums;
+  }
+  .control .control-header .num-input:focus {
+    outline: none;
+    border-color: #000;
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  input[type="range"] {
+    width: 100%;
+    accent-color: #000;
+    cursor: pointer;
+    height: 18px;
+  }
+
+  select {
+    width: 100%;
+    padding: 6px 8px;
+    background: #fff;
+    color: #111;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  select:focus { outline: none; border-color: #000; }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary {
+    background: #000;
+    color: #fff;
+  }
+  .btn-primary:hover { background: #333; }
+  .btn-secondary {
+    background: #e8e8e8;
+    color: #111;
+    border: 1px solid #ccc;
+  }
+  .btn-secondary:hover { background: #ddd; }
+
+  .stats {
+    font-size: 11px;
+    color: #999;
+    margin-top: 6px;
+    line-height: 1.6;
+  }
+  .stats span { color: #000; font-weight: 600; }
+
+  /* --- Preview area --- */
+  .preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e8e8e8;
+    padding: 20px;
+    position: relative;
+  }
+  .preview svg {
+    background: white;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.12);
+    display: block;
+    flex-shrink: 0;
+  }
+  .preview .hint {
+    position: absolute;
+    bottom: 12px;
+    right: 18px;
+    font-size: 10px;
+    color: #aaa;
+  }
+
+  /* checkbox row */
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+    font-size: 12px;
+    color: #555;
+  }
+  .check-row input[type="checkbox"] { accent-color: #000; }
+
+  /* preset name input */
+  .preset-name-input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #111;
+    background: #fff;
+    min-width: 0;
+  }
+  .preset-name-input:focus { outline: none; border-color: #000; }
+  .preset-name-input::placeholder { color: #bbb; }
+
+  .btn-icon {
+    flex: none;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #e8e8e8;
+    color: #111;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .btn-icon:hover { background: #ddd; }
+  .btn-icon.danger { color: #c00; }
+  .btn-icon.danger:hover { background: #fde; }
+
+  /* portrait / landscape toggle */
+  .orient-toggle { display:flex; gap:0; margin:2px 0 8px; }
+  .orient-btn {
+    flex:1; padding:5px 8px; font-size:11px; font-weight:700;
+    background:#e8e8e8; color:#999; border:1px solid #ccc;
+    cursor:pointer; text-align:center; letter-spacing:0.5px; text-transform:uppercase;
+  }
+  .orient-btn:first-child { border-radius:4px 0 0 4px; border-right:none; }
+  .orient-btn:last-child  { border-radius:0 4px 4px 0; }
+  .orient-btn.active { background:#000; color:#fff; border-color:#000; }
+
+  /* segmented control (crop type) */
+  .seg-control { display:flex; gap:0; margin:6px 0 4px; }
+  .seg-btn {
+    flex:1; padding:6px 4px; font-size:11px; font-weight:700;
+    background:#e8e8e8; color:#999; border:1px solid #ccc;
+    cursor:pointer; text-align:center;
+  }
+  .seg-btn:first-child { border-radius:4px 0 0 4px; }
+  .seg-btn + .seg-btn   { border-left:none; }
+  .seg-btn:last-child   { border-radius:0 4px 4px 0; }
+  .seg-btn.active { background:#000; color:#fff; border-color:#000; }
+
+  /* doc size dimension inputs */
+  .doc-dim-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #111;
+    background: #fff;
+    font-variant-numeric: tabular-nums;
+  }
+  .doc-dim-input:focus { outline: none; border-color: #000; }
+
+  .doc-dim-label {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 3px;
+  }
+
+  /* scrollbar */
+  .sidebar::-webkit-scrollbar { width: 6px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ============ SIDEBAR ============ -->
+<div class="sidebar">
+  <h1>Moiré SVG Generator</h1>
+  <div class="subtitle">Optimized for Axidraw pen plotter — continuous paths</div>
+
+  <!-- Presets -->
+  <fieldset>
+    <legend>Presets</legend>
+    <div style="display:flex;gap:6px;margin:6px 0 6px;">
+      <input type="text" id="presetName" class="preset-name-input" placeholder="Name this preset…" maxlength="60">
+      <button class="btn-icon" onclick="savePreset()">Save</button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <select id="presetList" style="flex:1">
+        <option value="">— Saved presets —</option>
+      </select>
+      <button class="btn-icon" onclick="loadPreset()">Load</button>
+      <button class="btn-icon danger" onclick="deletePreset()" title="Delete selected preset">✕</button>
+    </div>
+  </fieldset>
+
+  <!-- Document Size -->
+  <fieldset>
+    <legend>Document Size</legend>
+    <div style="display:flex;gap:6px;margin:6px 0 8px;">
+      <div style="flex:1">
+        <div class="doc-dim-label">Preset</div>
+        <select id="docPreset" onchange="onDocPresetChange()">
+          <option value="square">Square (150mm)</option>
+          <option value="letter-p" selected>Letter 8.5×11"</option>
+          <option value="letter-l">Letter 11×8.5"</option>
+          <option value="tabloid-p">Tabloid 11×17"</option>
+          <option value="tabloid-l">Tabloid 17×11"</option>
+          <option value="a4-p">A4 Portrait</option>
+          <option value="a4-l">A4 Landscape</option>
+          <option value="a3-p">A3 Portrait</option>
+          <option value="a3-l">A3 Landscape</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div style="width:72px">
+        <div class="doc-dim-label">Units</div>
+        <select id="docUnit" onchange="onDocUnitChange()">
+          <option value="mm">mm</option>
+          <option value="cm">cm</option>
+          <option value="in" selected>in</option>
+        </select>
+      </div>
+    </div>
+    <div class="orient-toggle">
+      <button id="btnPortrait"  class="orient-btn" onclick="setOrientation('portrait')">Portrait</button>
+      <button id="btnLandscape" class="orient-btn" onclick="setOrientation('landscape')">Landscape</button>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <div style="flex:1">
+        <div class="doc-dim-label">Width</div>
+        <input type="number" id="docW" class="doc-dim-input" min="1" step="0.1" oninput="onDocDimInput()">
+      </div>
+      <div style="flex:1">
+        <div class="doc-dim-label">Height</div>
+        <input type="number" id="docH" class="doc-dim-input" min="1" step="0.1" oninput="onDocDimInput()">
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- Pattern type -->
+  <fieldset>
+    <legend>Pattern</legend>
+    <div class="control">
+      <div class="control-header"><span class="label-text">Type</span></div>
+      <select id="patternType">
+        <option value="concentric-circles">Concentric Circles</option>
+        <option value="radial-lines">Radial Lines</option>
+        <option value="spiral">Spiral</option>
+        <option value="wave-lines">Wave Lines</option>
+        <option value="grid">Grid Lines</option>
+      </select>
+    </div>
+  </fieldset>
+
+  <!-- Layer A -->
+  <fieldset>
+    <legend>Layer A</legend>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Line Count</span>
+        <input type="number" class="num-input" data-for="countA">
+      </div>
+      <input type="range" id="countA" min="5" max="120" value="40">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Center X Offset</span>
+        <input type="number" class="num-input" data-for="cxA">
+      </div>
+      <input type="range" id="cxA" min="-200" max="200" value="0">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Center Y Offset</span>
+        <input type="number" class="num-input" data-for="cyA">
+      </div>
+      <input type="range" id="cyA" min="-200" max="200" value="0">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Rotation (°)</span>
+        <input type="number" class="num-input" data-for="rotA" step="0.5">
+      </div>
+      <input type="range" id="rotA" min="0" max="180" value="0" step="0.5">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Scale</span>
+        <input type="number" class="num-input" data-for="scaleA" step="0.01">
+      </div>
+      <input type="range" id="scaleA" min="0.3" max="3" value="1" step="0.01">
+    </div>
+  </fieldset>
+
+  <!-- Layer B -->
+  <fieldset>
+    <legend>Layer B</legend>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Line Count</span>
+        <input type="number" class="num-input" data-for="countB">
+      </div>
+      <input type="range" id="countB" min="5" max="120" value="40">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Center X Offset</span>
+        <input type="number" class="num-input" data-for="cxB">
+      </div>
+      <input type="range" id="cxB" min="-200" max="200" value="30">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Center Y Offset</span>
+        <input type="number" class="num-input" data-for="cyB">
+      </div>
+      <input type="range" id="cyB" min="-200" max="200" value="0">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Rotation (°)</span>
+        <input type="number" class="num-input" data-for="rotB" step="0.5">
+      </div>
+      <input type="range" id="rotB" min="0" max="180" value="3" step="0.5">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Scale</span>
+        <input type="number" class="num-input" data-for="scaleB" step="0.01">
+      </div>
+      <input type="range" id="scaleB" min="0.3" max="3" value="1" step="0.01">
+    </div>
+  </fieldset>
+
+  <!-- Global -->
+  <fieldset>
+    <legend>Global</legend>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Stroke Width</span>
+        <input type="number" class="num-input" data-for="strokeWidth" step="0.05">
+      </div>
+      <input type="range" id="strokeWidth" min="0.1" max="2" value="0.5" step="0.05">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Wave Amplitude</span>
+        <input type="number" class="num-input" data-for="amplitude" step="0.5">
+      </div>
+      <input type="range" id="amplitude" min="0" max="40" value="0" step="0.5">
+    </div>
+    <div class="control">
+      <div class="control-header">
+        <span class="label-text">Wave Frequency</span>
+        <input type="number" class="num-input" data-for="frequency" step="0.5">
+      </div>
+      <input type="range" id="frequency" min="1" max="20" value="3" step="0.5">
+    </div>
+  </fieldset>
+
+  <!-- Art Crop -->
+  <fieldset>
+    <legend>Art Crop</legend>
+    <div class="seg-control">
+      <button class="seg-btn"        data-crop="none"   onclick="setCropType('none')">None</button>
+      <button class="seg-btn active" data-crop="circle" onclick="setCropType('circle')">Circle</button>
+      <button class="seg-btn"        data-crop="square" onclick="setCropType('square')">Square</button>
+      <button class="seg-btn"        data-crop="rect"   onclick="setCropType('rect')">Rect</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px;">
+      <div class="doc-dim-label" style="margin:0;white-space:nowrap">Margin</div>
+      <input type="number" id="cropMargin" class="doc-dim-input" min="0" step="0.1" value="0.5" oninput="onCropMarginInput()" style="flex:1">
+      <div class="doc-dim-label" id="cropMarginUnit" style="margin:0;width:20px">in</div>
+    </div>
+  </fieldset>
+
+  <!-- Actions -->
+  <div class="btn-row">
+    <button class="btn-primary" onclick="downloadSVG()">Download SVG</button>
+    <button class="btn-secondary" onclick="randomize()">Randomize</button>
+  </div>
+  <div class="check-row">
+    <input type="checkbox" id="saveParamsTxt">
+    <label for="saveParamsTxt">Also save parameters as .txt</label>
+  </div>
+  <div class="stats" id="stats"></div>
+</div>
+
+<!-- ============ PREVIEW ============ -->
+<div class="preview">
+  <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="hint">Continuous paths optimized for pen plotter</div>
+</div>
+
+<script>
+// ---- Gather range controls ----
+const rangeControls = {};
+document.querySelectorAll('input[type="range"]').forEach(el => {
+  rangeControls[el.id] = el;
+});
+
+// ---- Sync number inputs with sliders ----
+function syncInputs() {
+  document.querySelectorAll('.num-input').forEach(numInput => {
+    const rangeId = numInput.getAttribute('data-for');
+    const range = rangeControls[rangeId];
+    if (range) {
+      numInput.value = range.value;
+      numInput.min = range.min;
+      numInput.max = range.max;
+    }
+  });
+}
+
+// Number input -> slider sync + render
+document.querySelectorAll('.num-input').forEach(numInput => {
+  numInput.addEventListener('input', () => {
+    const rangeId = numInput.getAttribute('data-for');
+    const range = rangeControls[rangeId];
+    if (range) {
+      range.value = numInput.value;
+      render();
+    }
+  });
+});
+
+// Slider -> number input sync + render
+document.querySelectorAll('input[type="range"]').forEach(range => {
+  range.addEventListener('input', () => {
+    const numInput = document.querySelector(`.num-input[data-for="${range.id}"]`);
+    if (numInput) numInput.value = range.value;
+    render();
+  });
+});
+
+// Select and checkbox
+document.querySelectorAll('select, input[type="checkbox"]').forEach(el => {
+  el.addEventListener('input', render);
+});
+
+function getVal(id) {
+  return +rangeControls[id].value;
+}
+
+// ---- Pattern generators ----
+// Each returns an array of polylines (each polyline = array of [x,y])
+// Each polyline is one continuous pen-down stroke
+
+function concentricCircles(cx, cy, count, scale, amplitude, frequency) {
+  const lines = [];
+  const maxR = 200 * scale;
+  for (let i = 1; i <= count; i++) {
+    const r = (maxR / count) * i;
+    const pts = [];
+    const steps = Math.max(72, Math.round(r * 1.5));
+    for (let j = 0; j <= steps; j++) {
+      const angle = (j / steps) * Math.PI * 2;
+      const warp = amplitude ? amplitude * Math.sin(frequency * angle) : 0;
+      const rr = r + warp;
+      pts.push([cx + rr * Math.cos(angle), cy + rr * Math.sin(angle)]);
+    }
+    lines.push(pts);
+  }
+  return lines;
+}
+
+function radialLines(cx, cy, count, scale, amplitude, frequency) {
+  const lines = [];
+  const maxR = 200 * scale;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    const pts = [];
+    const steps = 100;
+    for (let j = 0; j <= steps; j++) {
+      const t = j / steps;
+      const r = maxR * t;
+      const warp = amplitude ? amplitude * Math.sin(frequency * t * Math.PI * 2) : 0;
+      const a = angle + warp * 0.01;
+      pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+    }
+    lines.push(pts);
+  }
+  return lines;
+}
+
+function spiral(cx, cy, count, scale, amplitude, frequency) {
+  const lines = [];
+  const maxR = 200 * scale;
+  const turns = count * 0.4;
+  const totalSteps = Math.round(turns * 250);
+  const pts = [];
+  for (let j = 0; j <= totalSteps; j++) {
+    const t = j / totalSteps;
+    const angle = t * turns * Math.PI * 2;
+    const r = maxR * t;
+    const warp = amplitude ? amplitude * Math.sin(frequency * angle) : 0;
+    pts.push([cx + (r + warp) * Math.cos(angle), cy + (r + warp) * Math.sin(angle)]);
+  }
+  lines.push(pts);
+  return lines;
+}
+
+function waveLines(cx, cy, count, scale, amplitude, frequency) {
+  const lines = [];
+  const size = 200 * scale;
+  const amp = amplitude || 5;
+  for (let i = 0; i < count; i++) {
+    const y0 = cy - size + (2 * size / count) * i;
+    const pts = [];
+    const steps = 250;
+    for (let j = 0; j <= steps; j++) {
+      const t = j / steps;
+      const x = cx - size + 2 * size * t;
+      const y = y0 + amp * Math.sin(frequency * t * Math.PI * 2);
+      pts.push([x, y]);
+    }
+    lines.push(pts);
+  }
+  return lines;
+}
+
+function gridLines(cx, cy, count, scale, amplitude, frequency) {
+  const lines = [];
+  const size = 200 * scale;
+  for (let i = 0; i < count; i++) {
+    const y0 = cy - size + (2 * size / (count - 1)) * i;
+    const pts = [];
+    const steps = 200;
+    for (let j = 0; j <= steps; j++) {
+      const t = j / steps;
+      const x = cx - size + 2 * size * t;
+      const warp = amplitude ? amplitude * Math.sin(frequency * t * Math.PI * 2) : 0;
+      pts.push([x, y0 + warp]);
+    }
+    lines.push(pts);
+  }
+  for (let i = 0; i < count; i++) {
+    const x0 = cx - size + (2 * size / (count - 1)) * i;
+    const pts = [];
+    const steps = 200;
+    for (let j = 0; j <= steps; j++) {
+      const t = j / steps;
+      const y = cy - size + 2 * size * t;
+      const warp = amplitude ? amplitude * Math.sin(frequency * t * Math.PI * 2) : 0;
+      pts.push([x0 + warp, y]);
+    }
+    lines.push(pts);
+  }
+  return lines;
+}
+
+function generateLayer(type, cx, cy, count, rotation, scale, amplitude, frequency) {
+  let lines;
+  switch (type) {
+    case 'concentric-circles': lines = concentricCircles(cx, cy, count, scale, amplitude, frequency); break;
+    case 'radial-lines':       lines = radialLines(cx, cy, count, scale, amplitude, frequency); break;
+    case 'spiral':             lines = spiral(cx, cy, count, scale, amplitude, frequency); break;
+    case 'wave-lines':         lines = waveLines(cx, cy, count, scale, amplitude, frequency); break;
+    case 'grid':               lines = gridLines(cx, cy, count, scale, amplitude, frequency); break;
+    default:                   lines = concentricCircles(cx, cy, count, scale, amplitude, frequency);
+  }
+
+  if (rotation !== 0) {
+    const rad = rotation * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    lines = lines.map(pts => pts.map(([x, y]) => {
+      const dx = x - cx, dy = y - cy;
+      return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
+    }));
+  }
+  return lines;
+}
+
+// ---- Polyline to SVG path (continuous) ----
+function polylineToPath(pts) {
+  if (pts.length < 2) return '';
+  let d = `M${pts[0][0].toFixed(2)},${pts[0][1].toFixed(2)}`;
+  for (let i = 1; i < pts.length; i++) {
+    d += `L${pts[i][0].toFixed(2)},${pts[i][1].toFixed(2)}`;
+  }
+  return d;
+}
+
+// ---- Reorder paths via nearest-neighbor to minimize travel (pen-up distance) ----
+// Each path stays intact — no chaining or connecting between paths.
+function reorderPaths(allLines) {
+  if (allLines.length <= 1) return allLines;
+
+  const used = new Array(allLines.length).fill(false);
+  const result = [];
+
+  // Start with first path
+  used[0] = true;
+  result.push(allLines[0]);
+
+  for (let n = 1; n < allLines.length; n++) {
+    const lastPath = result[result.length - 1];
+    const end = lastPath[lastPath.length - 1];
+    let bestIdx = -1, bestDist = Infinity, bestReverse = false;
+
+    for (let i = 0; i < allLines.length; i++) {
+      if (used[i]) continue;
+      const line = allLines[i];
+      const dStart = Math.hypot(end[0] - line[0][0], end[1] - line[0][1]);
+      const dEnd = Math.hypot(end[0] - line[line.length - 1][0], end[1] - line[line.length - 1][1]);
+      if (dStart < bestDist) { bestDist = dStart; bestIdx = i; bestReverse = false; }
+      if (dEnd < bestDist) { bestDist = dEnd; bestIdx = i; bestReverse = true; }
+    }
+
+    if (bestIdx === -1) break;
+    used[bestIdx] = true;
+
+    // Reverse the path direction if its end is closer — still one clean path, just drawn in reverse
+    if (bestReverse) {
+      result.push([...allLines[bestIdx]].reverse());
+    } else {
+      result.push(allLines[bestIdx]);
+    }
+  }
+  return result;
+}
+
+// ---- Clip polyline to circle with interpolated boundary points ----
+function clipPolylineToCircle(pts, cx, cy, r) {
+  const segments = [];
+  let current = [];
+
+  function isInside(p) {
+    return Math.hypot(p[0] - cx, p[1] - cy) <= r;
+  }
+
+  // Interpolate the crossing point on the circle boundary
+  function intersectCircle(a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const fx = a[0] - cx, fy = a[1] - cy;
+    const A = dx * dx + dy * dy;
+    const B = 2 * (fx * dx + fy * dy);
+    const C = fx * fx + fy * fy - r * r;
+    const disc = B * B - 4 * A * C;
+    if (disc < 0) return null;
+    const sqrtDisc = Math.sqrt(disc);
+    const t1 = (-B - sqrtDisc) / (2 * A);
+    const t2 = (-B + sqrtDisc) / (2 * A);
+    // Pick the t in [0,1]
+    for (const t of [t1, t2]) {
+      if (t >= 0 && t <= 1) {
+        return [a[0] + t * dx, a[1] + t * dy];
+      }
+    }
+    return null;
+  }
+
+  for (let i = 0; i < pts.length; i++) {
+    const pIn = isInside(pts[i]);
+
+    if (i > 0) {
+      const prevIn = isInside(pts[i - 1]);
+      if (prevIn && !pIn) {
+        // Exiting: interpolate boundary point, end segment
+        const bp = intersectCircle(pts[i - 1], pts[i]);
+        if (bp) current.push(bp);
+        if (current.length >= 2) segments.push(current);
+        current = [];
+        continue;
+      }
+      if (!prevIn && pIn) {
+        // Entering: interpolate boundary point, start segment
+        const bp = intersectCircle(pts[i - 1], pts[i]);
+        if (bp) current = [bp];
+      }
+    }
+
+    if (pIn) {
+      current.push(pts[i]);
+    }
+  }
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+// ---- Clip polyline to rectangle (Liang-Barsky) ----
+function clipPolylineToRect(pts, rx0, ry0, rx1, ry1) {
+  const segments = [];
+  let current = [];
+
+  function isInside(p) {
+    return p[0] >= rx0 && p[0] <= rx1 && p[1] >= ry0 && p[1] <= ry1;
+  }
+
+  function intersectSegment(a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const p = [-dx, dx, -dy, dy];
+    const q = [a[0] - rx0, rx1 - a[0], a[1] - ry0, ry1 - a[1]];
+    let t0 = 0, t1 = 1;
+    for (let k = 0; k < 4; k++) {
+      if (Math.abs(p[k]) < 1e-10) {
+        if (q[k] < 0) return null;
+      } else {
+        const t = q[k] / p[k];
+        if (p[k] < 0) t0 = Math.max(t0, t);
+        else           t1 = Math.min(t1, t);
+      }
+    }
+    if (t0 > t1 + 1e-10) return null;
+    return {
+      enter: [a[0] + t0 * dx, a[1] + t0 * dy],
+      exit:  [a[0] + t1 * dx, a[1] + t1 * dy],
+    };
+  }
+
+  for (let i = 0; i < pts.length; i++) {
+    const pIn = isInside(pts[i]);
+    if (i > 0) {
+      const prevIn = isInside(pts[i - 1]);
+      if (prevIn && !pIn) {
+        const cl = intersectSegment(pts[i - 1], pts[i]);
+        if (cl) current.push(cl.exit);
+        if (current.length >= 2) segments.push(current);
+        current = [];
+        continue;
+      }
+      if (!prevIn && pIn) {
+        const cl = intersectSegment(pts[i - 1], pts[i]);
+        current = cl ? [cl.enter] : [];
+      }
+    }
+    if (pIn) current.push(pts[i]);
+  }
+  if (current.length >= 2) segments.push(current);
+  return segments;
+}
+
+// ---- Main render ----
+function render() {
+  syncInputs();
+
+  const type = document.getElementById('patternType').value;
+  // Art square always covers the full document so patterns extend to/beyond crop bounds
+  const canvasSize = Math.max(docW_mm, docH_mm);
+  const half = canvasSize / 2;
+  const strokeW = getVal('strokeWidth');
+  const amp = getVal('amplitude');
+  const freq = getVal('frequency');
+
+  const s = canvasSize / 400;
+
+  const cxA = getVal('cxA') * s;
+  const cyA = getVal('cyA') * s;
+  const cxB = getVal('cxB') * s;
+  const cyB = getVal('cyB') * s;
+
+  const linesA = generateLayer(type, half + cxA, half + cyA, getVal('countA'), getVal('rotA'), getVal('scaleA') * s, amp * s, freq);
+  const linesB = generateLayer(type, half + cxB, half + cyB, getVal('countB'), getVal('rotB'), getVal('scaleB') * s, amp * s, freq);
+
+  let allLines = [...linesA, ...linesB];
+
+  // Apply art crop (actual path clipping in art-local coordinate space)
+  const cropType = getCropType();
+  if (cropType !== 'none') {
+    const artOffX = (docW_mm - canvasSize) / 2;
+    const artOffY = (docH_mm - canvasSize) / 2;
+    const cX0 = cropMargin_mm - artOffX;
+    const cY0 = cropMargin_mm - artOffY;
+    const cX1 = docW_mm - cropMargin_mm - artOffX;
+    const cY1 = docH_mm - cropMargin_mm - artOffY;
+    const cW = cX1 - cX0, cH = cY1 - cY0;
+    let clipped = [];
+    if (cropType === 'circle') {
+      const clipR = Math.min(cW, cH) / 2;
+      const clipCX = (cX0 + cX1) / 2, clipCY = (cY0 + cY1) / 2;
+      allLines.forEach(pts => clipped.push(...clipPolylineToCircle(pts, clipCX, clipCY, clipR)));
+    } else if (cropType === 'square') {
+      const side = Math.min(cW, cH);
+      const sx0 = (cX0 + cX1) / 2 - side / 2, sy0 = (cY0 + cY1) / 2 - side / 2;
+      allLines.forEach(pts => clipped.push(...clipPolylineToRect(pts, sx0, sy0, sx0 + side, sy0 + side)));
+    } else {
+      allLines.forEach(pts => clipped.push(...clipPolylineToRect(pts, cX0, cY0, cX1, cY1)));
+    }
+    allLines = clipped;
+  }
+
+  // Reorder paths for minimal pen-up travel
+  const ordered = reorderPaths(allLines);
+
+  // Build paths
+  let pathsHTML = '';
+  let totalPoints = 0;
+  ordered.forEach(pts => {
+    totalPoints += pts.length;
+    const d = polylineToPath(pts);
+    if (d) {
+      pathsHTML += `<path d="${d}" fill="none" stroke="black" stroke-width="${strokeW}" stroke-linecap="round" stroke-linejoin="round"/>\n`;
+    }
+  });
+
+  // Center art within document
+  const offsetX = ((docW_mm - canvasSize) / 2).toFixed(3);
+  const offsetY = ((docH_mm - canvasSize) / 2).toFixed(3);
+
+  // Build SVG — size to fit preview in px; mm used only on download
+  const svg = document.getElementById('canvas');
+  const docWr = docW_mm.toFixed(3);
+  const docHr = docH_mm.toFixed(3);
+  const previewEl = document.querySelector('.preview');
+  const availW = Math.max(previewEl.clientWidth  - 40, 80);
+  const availH = Math.max(previewEl.clientHeight - 40, 80);
+  const dScale  = Math.min(availW / docW_mm, availH / docH_mm);
+  svg.setAttribute('width',   Math.round(docW_mm * dScale) + 'px');
+  svg.setAttribute('height',  Math.round(docH_mm * dScale) + 'px');
+  svg.setAttribute('viewBox', `0 0 ${docWr} ${docHr}`);
+  svg.innerHTML = `<g transform="translate(${offsetX},${offsetY})">${pathsHTML}</g>`;
+
+  // Stats
+  const unit = document.getElementById('docUnit').value;
+  const factor = UNIT_TO_MM[unit];
+  const wDisp = (docW_mm / factor).toFixed(unit === 'mm' ? 1 : 2);
+  const hDisp = (docH_mm / factor).toFixed(unit === 'mm' ? 1 : 2);
+  document.getElementById('stats').innerHTML =
+    `Paths: <span>${ordered.length}</span> (pen lifts) &nbsp;|&nbsp; ` +
+    `Points: <span>${totalPoints.toLocaleString()}</span> &nbsp;|&nbsp; ` +
+    `Doc: <span>${wDisp}&times;${hDisp} ${unit}</span>`;
+
+  updateOrientToggle();
+}
+
+// ---- Download SVG ----
+function downloadSVG() {
+  const svg = document.getElementById('canvas');
+  // Swap to physical mm dimensions for the export, then restore display px
+  const prevW = svg.getAttribute('width');
+  const prevH = svg.getAttribute('height');
+  svg.setAttribute('width',  docW_mm.toFixed(3) + 'mm');
+  svg.setAttribute('height', docH_mm.toFixed(3) + 'mm');
+  const serializer = new XMLSerializer();
+  let source = serializer.serializeToString(svg);
+  svg.setAttribute('width', prevW);
+  svg.setAttribute('height', prevH);
+
+  if (!source.match(/^<\?xml/)) {
+    source = '<?xml version="1.0" encoding="UTF-8"?>\n' + source;
+  }
+  if (!source.match(/xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)) {
+    source = source.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+
+  const basename = `moire-axidraw-${Date.now()}`;
+
+  const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${basename}.svg`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  // Optionally save a matching .txt with parameter values
+  if (document.getElementById('saveParamsTxt').checked) {
+    const text = paramsToText(getCurrentParams(), `${basename}.svg`);
+    const tblob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const turl = URL.createObjectURL(tblob);
+    const ta = document.createElement('a');
+    ta.href = turl;
+    ta.download = `${basename}.txt`;
+    document.body.appendChild(ta);
+    ta.click();
+    document.body.removeChild(ta);
+    URL.revokeObjectURL(turl);
+  }
+}
+
+// ---- Randomize ----
+function randomize() {
+  const rand = (min, max) => Math.round(min + Math.random() * (max - min));
+  const randF = (min, max, step) => {
+    const v = min + Math.random() * (max - min);
+    return Math.round(v / step) * step;
+  };
+
+  const set = (id, val) => { rangeControls[id].value = val; };
+
+  set('countA', rand(15, 80));
+  set('countB', rand(15, 80));
+  set('cxA', rand(-100, 100));
+  set('cyA', rand(-100, 100));
+  set('cxB', rand(-100, 100));
+  set('cyB', rand(-100, 100));
+  set('rotA', randF(0, 45, 0.5));
+  set('rotB', randF(0, 45, 0.5));
+  set('scaleA', randF(0.6, 1.8, 0.01));
+  set('scaleB', randF(0.6, 1.8, 0.01));
+  set('amplitude', randF(0, 20, 0.5));
+  set('frequency', randF(1, 12, 0.5));
+
+  const types = ['concentric-circles', 'radial-lines', 'spiral', 'wave-lines', 'grid'];
+  document.getElementById('patternType').value = types[Math.floor(Math.random() * types.length)];
+
+  render();
+}
+
+// ---- Art Crop ----
+let cropMargin_mm = 12.7; // 0.5"
+
+function getCropType() {
+  const active = document.querySelector('.seg-btn.active[data-crop]');
+  return active ? active.getAttribute('data-crop') : 'none';
+}
+
+function setCropType(t) {
+  document.querySelectorAll('.seg-btn[data-crop]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-crop') === t);
+  });
+  render();
+}
+
+function setCropMarginField(vmm) {
+  const unit = document.getElementById('docUnit').value;
+  const factor = UNIT_TO_MM[unit];
+  const dp = unit === 'mm' ? 1 : 3;
+  document.getElementById('cropMargin').value = (vmm / factor).toFixed(dp);
+}
+
+function onCropMarginInput() {
+  const unit = document.getElementById('docUnit').value;
+  const factor = UNIT_TO_MM[unit];
+  const v = parseFloat(document.getElementById('cropMargin').value);
+  if (v >= 0) cropMargin_mm = v * factor;
+  render();
+}
+
+// ---- Portrait / Landscape ----
+function updateOrientToggle() {
+  const btnP = document.getElementById('btnPortrait');
+  const btnL = document.getElementById('btnLandscape');
+  if (docW_mm < docH_mm - 0.01) {
+    btnP.classList.add('active');    btnL.classList.remove('active');
+  } else if (docW_mm > docH_mm + 0.01) {
+    btnL.classList.add('active');    btnP.classList.remove('active');
+  } else {
+    btnP.classList.remove('active'); btnL.classList.remove('active');
+  }
+}
+
+function setOrientation(orient) {
+  const isPortrait  = docW_mm < docH_mm - 0.01;
+  const isLandscape = docW_mm > docH_mm + 0.01;
+  if (orient === 'portrait'  && !isPortrait  && isLandscape) {
+    [docW_mm, docH_mm] = [docH_mm, docW_mm];
+    swapDocPresetOrientation();
+    setDocFields(docW_mm, docH_mm);
+    render();
+  } else if (orient === 'landscape' && !isLandscape && isPortrait) {
+    [docW_mm, docH_mm] = [docH_mm, docW_mm];
+    swapDocPresetOrientation();
+    setDocFields(docW_mm, docH_mm);
+    render();
+  }
+}
+
+function swapDocPresetOrientation() {
+  const sel = document.getElementById('docPreset');
+  if (sel.value.endsWith('-p')) sel.value = sel.value.slice(0, -2) + '-l';
+  else if (sel.value.endsWith('-l')) sel.value = sel.value.slice(0, -2) + '-p';
+}
+
+// ---- Document size ----
+const UNIT_TO_MM = { mm: 1, cm: 10, in: 25.4 };
+
+// Presets in mm [width, height]
+const DOC_PRESETS_MM = {
+  'square':    [150,    150  ],
+  'letter-p':  [215.9,  279.4],
+  'letter-l':  [279.4,  215.9],
+  'tabloid-p': [279.4,  431.8],
+  'tabloid-l': [431.8,  279.4],
+  'a4-p':      [210,    297  ],
+  'a4-l':      [297,    210  ],
+  'a3-p':      [297,    420  ],
+  'a3-l':      [420,    297  ],
+};
+
+// Source of truth — always in mm (default: Letter portrait)
+let docW_mm = 215.9;
+let docH_mm = 279.4;
+
+function setDocFields(wmm, hmm) {
+  const unit = document.getElementById('docUnit').value;
+  const factor = UNIT_TO_MM[unit];
+  const dp = unit === 'mm' ? 1 : 3;
+  document.getElementById('docW').value = (wmm / factor).toFixed(dp);
+  document.getElementById('docH').value = (hmm / factor).toFixed(dp);
+}
+
+function onDocPresetChange() {
+  const val = document.getElementById('docPreset').value;
+  if (DOC_PRESETS_MM[val]) {
+    [docW_mm, docH_mm] = DOC_PRESETS_MM[val];
+    setDocFields(docW_mm, docH_mm);
+  }
+  render();
+}
+
+function onDocUnitChange() {
+  const unit = document.getElementById('docUnit').value;
+  setDocFields(docW_mm, docH_mm);
+  setCropMarginField(cropMargin_mm);
+  document.getElementById('cropMarginUnit').textContent = unit;
+  render();
+}
+
+function onDocDimInput() {
+  const unit = document.getElementById('docUnit').value;
+  const factor = UNIT_TO_MM[unit];
+  const w = parseFloat(document.getElementById('docW').value);
+  const h = parseFloat(document.getElementById('docH').value);
+  if (w > 0) docW_mm = w * factor;
+  if (h > 0) docH_mm = h * factor;
+  document.getElementById('docPreset').value = 'custom';
+  render();
+}
+
+// ---- Collect / apply all current parameter values ----
+function getCurrentParams() {
+  return {
+    patternType: document.getElementById('patternType').value,
+    countA:      getVal('countA'),
+    cxA:         getVal('cxA'),
+    cyA:         getVal('cyA'),
+    rotA:        getVal('rotA'),
+    scaleA:      getVal('scaleA'),
+    countB:      getVal('countB'),
+    cxB:         getVal('cxB'),
+    cyB:         getVal('cyB'),
+    rotB:        getVal('rotB'),
+    scaleB:      getVal('scaleB'),
+    strokeWidth: getVal('strokeWidth'),
+    amplitude:   getVal('amplitude'),
+    frequency:   getVal('frequency'),
+    cropType:    getCropType(),
+    cropMargin_mm: cropMargin_mm,
+    docW_mm:     docW_mm,
+    docH_mm:     docH_mm,
+    docUnit:     document.getElementById('docUnit').value,
+    docPreset:   document.getElementById('docPreset').value,
+  };
+}
+
+function applyParams(p) {
+  document.getElementById('patternType').value = p.patternType;
+  ['countA','cxA','cyA','rotA','scaleA','countB','cxB','cyB','rotB','scaleB',
+   'strokeWidth','amplitude','frequency'].forEach(id => {
+    if (p[id] !== undefined) rangeControls[id].value = p[id];
+  });
+  if (p.cropType) setCropType(p.cropType);
+  if (p.cropMargin_mm !== undefined) {
+    cropMargin_mm = p.cropMargin_mm;
+    setCropMarginField(cropMargin_mm);
+  }
+  if (p.docW_mm !== undefined) {
+    docW_mm = p.docW_mm;
+    docH_mm = p.docH_mm;
+    if (p.docUnit) document.getElementById('docUnit').value = p.docUnit;
+    if (p.docPreset) document.getElementById('docPreset').value = p.docPreset;
+    setDocFields(docW_mm, docH_mm);
+  }
+  render();
+}
+
+// ---- Presets (stored in localStorage) ----
+const PRESETS_KEY = 'moire_presets_v1';
+
+function loadPresetsStore() {
+  try { return JSON.parse(localStorage.getItem(PRESETS_KEY)) || {}; }
+  catch { return {}; }
+}
+function savePresetsStore(store) {
+  localStorage.setItem(PRESETS_KEY, JSON.stringify(store));
+}
+
+function refreshPresetList() {
+  const store = loadPresetsStore();
+  const sel = document.getElementById('presetList');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Saved presets —</option>';
+  Object.keys(store).sort().forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  if (current && store[current]) sel.value = current;
+}
+
+function savePreset() {
+  const name = document.getElementById('presetName').value.trim();
+  if (!name) { alert('Enter a name for this preset.'); return; }
+  const store = loadPresetsStore();
+  if (store[name] && !confirm(`Overwrite preset "${name}"?`)) return;
+  store[name] = getCurrentParams();
+  savePresetsStore(store);
+  refreshPresetList();
+  document.getElementById('presetList').value = name;
+  document.getElementById('presetName').value = '';
+}
+
+function loadPreset() {
+  const name = document.getElementById('presetList').value;
+  if (!name) return;
+  const store = loadPresetsStore();
+  if (store[name]) applyParams(store[name]);
+}
+
+function deletePreset() {
+  const name = document.getElementById('presetList').value;
+  if (!name) return;
+  if (!confirm(`Delete preset "${name}"?`)) return;
+  const store = loadPresetsStore();
+  delete store[name];
+  savePresetsStore(store);
+  refreshPresetList();
+}
+
+// ---- Format params as readable text ----
+function paramsToText(p, filename) {
+  const yesNo = v => v ? 'Yes' : 'No';
+  const patternLabels = {
+    'concentric-circles': 'Concentric Circles',
+    'radial-lines': 'Radial Lines',
+    'spiral': 'Spiral',
+    'wave-lines': 'Wave Lines',
+    'grid': 'Grid Lines',
+  };
+  const unit = p.docUnit || 'mm';
+  const factor = UNIT_TO_MM[unit] || 1;
+  const dp = unit === 'mm' ? 1 : 3;
+  const wDisp = p.docW_mm !== undefined ? (p.docW_mm / factor).toFixed(dp) : '?';
+  const hDisp = p.docH_mm !== undefined ? (p.docH_mm / factor).toFixed(dp) : '?';
+  return [
+    'Moiré SVG Generator — Parameter Settings',
+    `File: ${filename}`,
+    `Date: ${new Date().toLocaleString()}`,
+    '',
+    `Pattern Type:    ${patternLabels[p.patternType] || p.patternType}`,
+    '',
+    'Document:',
+    `  Width:             ${wDisp} ${unit}`,
+    `  Height:            ${hDisp} ${unit}`,
+    '',
+    'Layer A:',
+    `  Line Count:        ${p.countA}`,
+    `  Center X Offset:   ${p.cxA}`,
+    `  Center Y Offset:   ${p.cyA}`,
+    `  Rotation:          ${p.rotA}°`,
+    `  Scale:             ${p.scaleA}`,
+    '',
+    'Layer B:',
+    `  Line Count:        ${p.countB}`,
+    `  Center X Offset:   ${p.cxB}`,
+    `  Center Y Offset:   ${p.cyB}`,
+    `  Rotation:          ${p.rotB}°`,
+    `  Scale:             ${p.scaleB}`,
+    '',
+    'Global:',
+    `  Stroke Width:      ${p.strokeWidth}`,
+    `  Wave Amplitude:    ${p.amplitude}`,
+    `  Wave Frequency:    ${p.frequency}`,
+    `  Crop:              ${p.cropType || 'none'}`,
+    `  Crop Margin:       ${p.cropMargin_mm !== undefined ? (p.cropMargin_mm / (UNIT_TO_MM[unit]||1)).toFixed(dp) + ' ' + unit : 'n/a'}`,
+  ].join('\n');
+}
+
+window.addEventListener('resize', render);
+
+// ---- Initial render ----
+refreshPresetList();
+setDocFields(docW_mm, docH_mm);
+setCropMarginField(cropMargin_mm);
+render();
+</script>
+</body>
+</html>
