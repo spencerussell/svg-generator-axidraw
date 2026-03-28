@@ -1,5 +1,6 @@
 import { getBoundingTiles, fetchTerrariumTile, stitchTiles } from './tiles.js'
-import { buildContours, findClipRing, pointInPolygon } from './contours.js'
+import { buildContours, pointInPolygon } from './contours.js'
+import { textToPathD } from '../../lib/strokeFont.js'
 
 const ZOOM = 12
 
@@ -46,39 +47,49 @@ export async function loadElevationData(location, onProgress) {
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — build contour rings from cached grid (re-runs when interval changes)
+// Step 2 — build contour rings from cached grid (re-runs when interval or
+// extent changes)
 //
-// Two filters isolate the mountain:
-//   1. Base elevation cutoff — ignores huge low-elevation rings (terrain floor)
-//   2. Summit-enclosing filter — at each level, keeps only the ring around the
-//      peak, excluding nearby ridges/hills at the same elevation
+// Isolation uses a distance-based approach: only keep contour rings whose
+// every point falls within the user-controlled extent radius (km) from the
+// summit.  This works universally regardless of mountain shape or surrounding
+// terrain.  An additional pointInPolygon test keeps only rings belonging to
+// this peak (not adjacent ridges at the same elevation).
 // ---------------------------------------------------------------------------
 export function buildContourData(gridData, params) {
-  const { grid, gridWidth, gridHeight, summitX, summitY, summitElev } = gridData
+  const { grid, gridWidth, gridHeight, pixelSizeMeters, summitX, summitY, summitElev } = gridData
   const intervalM = params.unit === 'ft' ? params.interval * 0.3048 : params.interval
 
   const { contourRings, minElev, maxElev } = buildContours(
     grid, gridWidth, gridHeight, intervalM,
   )
 
-  // Find the mountain footprint ring (~20% up from base to summit)
-  const clipResult = findClipRing(contourRings, summitX, summitY, gridWidth, gridHeight, summitElev)
-  const baseElevation = clipResult?.elevation ?? -Infinity
+  // Convert extent (km) to grid pixels
+  const extentKm = params.extentKm ?? 10
+  const maxDistPx = (extentKm * 1000) / pixelSizeMeters
+  const maxDistSq = maxDistPx * maxDistPx
 
-  // Keep only rings that are:
-  //   (a) at or above the base elevation, AND
-  //   (b) enclose the summit (i.e. belong to this mountain, not nearby terrain)
-  // Exception: near the peak, skip the pointInPolygon test — tiny rings can fail
-  // the test after simplification distorts their geometry, and at high elevation
-  // there's no ambiguity about which mountain they belong to.
-  const peakThreshold = summitElev - (summitElev - baseElevation) * 0.15
+  // Near the peak, skip pointInPolygon — tiny simplified rings can fail the
+  // test, and at high elevation there's no ambiguity about which mountain
+  // they belong to.
+  const peakThreshold = summitElev - (summitElev - minElev) * 0.15
+
   const mountainRings = contourRings
-    .filter(({ elevation }) => elevation >= baseElevation)
     .map(({ elevation, rings }) => ({
       elevation,
-      rings: elevation >= peakThreshold
-        ? rings  // keep all rings near peak
-        : rings.filter(ring => pointInPolygon(summitX, summitY, ring)),
+      rings: rings.filter(ring => {
+        // Distance check: every point must be within the extent radius
+        for (const [gx, gy] of ring) {
+          const dx = gx - summitX
+          const dy = gy - summitY
+          if (dx * dx + dy * dy > maxDistSq) return false
+        }
+        // Summit enclosure check (skip near peak)
+        if (elevation < peakThreshold) {
+          return pointInPolygon(summitX, summitY, ring)
+        }
+        return true
+      }),
     }))
     .filter(({ rings }) => rings.length > 0)
     .sort((a, b) => a.elevation - b.elevation)
@@ -95,7 +106,7 @@ export function buildContourData(gridData, params) {
 //     of the next ring up — giving correct hidden-line removal
 //   • No clip path needed — contours are pre-filtered to the mountain only
 // ---------------------------------------------------------------------------
-export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH) {
+export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH, location) {
   const { contourRings } = contourData
   const { gridWidth, gridHeight, pixelSizeMeters, summitX, summitY, summitElev } = gridData
 
@@ -171,13 +182,23 @@ export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH) 
 
   if (minX === Infinity) { svgEl.innerHTML = ''; return }
 
-  // Auto-fit to viewport
+  // Auto-fit to viewport (reserve bottom space for label when enabled)
   const pad = Math.max(32, Math.min(svgW, svgH) * 0.06)
+  let labelReserve = 0
+  if (params.showLabel && location) {
+    const pxPerMM = svgH / (params.doc?.h_mm || svgH)
+    const PT = 25.4 / 72
+    const bottomMM = Math.min(12, (params.doc?.h_mm || 215.9) * 0.06)
+    let reserveMM = 8 * PT + 2 + 5 * PT + bottomMM + 4
+    if (params.showElevation) reserveMM += 5 * PT + 2
+    labelReserve = reserveMM * pxPerMM
+  }
   const rangeX = maxX - minX || 1
   const rangeY = maxY - minY || 1
-  const scale = Math.min((svgW - 2 * pad) / rangeX, (svgH - 2 * pad) / rangeY)
+  const availH = svgH - labelReserve
+  const scale = Math.min((svgW - 2 * pad) / rangeX, (availH - 2 * pad) / rangeY)
   const tx = (svgW - rangeX * scale) / 2 - minX * scale
-  const ty = (svgH - rangeY * scale) / 2 - minY * scale
+  const ty = (availH - rangeY * scale) / 2 - minY * scale
 
   function toSVG([x, y]) {
     return [x * scale + tx, y * scale + ty]
@@ -274,6 +295,57 @@ export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH) 
       path.setAttribute('fill', '#fff')
       path.setAttribute('stroke', '#000')
       path.setAttribute('stroke-width', '0.5')
+      path.setAttribute('stroke-linejoin', 'round')
+      g.appendChild(path)
+    }
+  }
+
+  // Render label text as single-stroke paths
+  if (params.showLabel && location) {
+    const pxPerMM = svgH / (params.doc?.h_mm || svgH)
+    const PT = 25.4 / 72
+    const bottomMM = Math.min(25, (params.doc?.h_mm || 215.9) * 0.12)
+
+    const nameCapH  = 10 * PT * pxPerMM
+    const stateCapH = 6 * PT * pxPerMM
+    const elevCapH  = 6 * PT * pxPerMM
+
+    // Stack baselines from the bottom up
+    let bottomY = svgH - bottomMM * pxPerMM
+    let elevBaseline = null
+    if (params.showElevation) {
+      elevBaseline = bottomY
+      bottomY -= elevCapH + 2 * pxPerMM
+    }
+    const stateBaseline = bottomY
+    const nameBaseline  = stateBaseline - stateCapH - 2 * pxPerMM
+
+    const cx = svgW / 2
+    const mountainName = (location.shortName || '').toUpperCase()
+    const stateName    = (location.state || location.country || '').toUpperCase()
+
+    // Format elevation: convert meters to feet if unit is ft, add comma separators
+    let elevText = null
+    if (params.showElevation && summitElev != null) {
+      const elevVal = params.unit === 'ft' ? Math.round(summitElev * 3.28084) : Math.round(summitElev)
+      const formatted = String(elevVal).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+      const suffix = params.unit === 'ft' ? "'" : ' M'
+      elevText = `ELEV. ${formatted}${suffix}`
+    }
+
+    const labels = [[mountainName, nameBaseline, nameCapH], [stateName, stateBaseline, stateCapH]]
+    if (elevText) labels.push([elevText, elevBaseline, elevCapH])
+
+    for (const [text, baseline, capH] of labels) {
+      if (!text) continue
+      const d = textToPathD(text, cx, baseline, capH)
+      if (!d) continue
+      const path = document.createElementNS(NS, 'path')
+      path.setAttribute('d', d)
+      path.setAttribute('fill', 'none')
+      path.setAttribute('stroke', '#000')
+      path.setAttribute('stroke-width', '0.5')
+      path.setAttribute('stroke-linecap', 'round')
       path.setAttribute('stroke-linejoin', 'round')
       g.appendChild(path)
     }

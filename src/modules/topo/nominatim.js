@@ -29,6 +29,8 @@ export async function searchLocation(query) {
       },
       type: r.type,
       category: r.class,
+      state: r.address?.state || '',
+      country: r.address?.country || '',
     }))
     .filter(r => {
       if (seen.has(r.shortName)) return false

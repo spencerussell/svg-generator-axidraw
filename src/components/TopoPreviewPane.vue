@@ -49,6 +49,7 @@ let gridCache    = null   // from loadElevationData
 let contourCache = null   // from buildContourData
 let lastUnit     = null
 let lastInterval = null
+let lastExtentKm = null
 
 function onProgress(p) {
   loading.value = { active: true, ...p }
@@ -69,6 +70,7 @@ async function loadLocation(loc) {
     contourCache = buildContourData(gridCache, props.params)
     lastUnit     = props.params.unit
     lastInterval = props.params.interval
+    lastExtentKm = props.params.extentKm
 
     onProgress({ stage: 'Rendering', pct: 92 })
     doRender()
@@ -85,6 +87,7 @@ function rebuildContours() {
   contourCache = buildContourData(gridCache, props.params)
   lastUnit     = props.params.unit
   lastInterval = props.params.interval
+  lastExtentKm = props.params.extentKm
   doRender()
 }
 
@@ -100,7 +103,7 @@ function doRender() {
   const h = Math.max(Math.round(h_mm * dScale), 80)
   svgEl.value.style.width  = w + 'px'
   svgEl.value.style.height = h + 'px'
-  renderTopoSVG(svgEl.value, contourCache, gridCache, props.params, w, h)
+  renderTopoSVG(svgEl.value, contourCache, gridCache, props.params, w, h, props.location)
 }
 
 // Watch location → full reload
@@ -111,7 +114,7 @@ watch(
   () => props.params,
   (newP) => {
     if (!gridCache) return
-    const intervalChanged = newP.interval !== lastInterval || newP.unit !== lastUnit
+    const intervalChanged = newP.interval !== lastInterval || newP.unit !== lastUnit || newP.extentKm !== lastExtentKm
     if (intervalChanged) rebuildContours()
     else doRender()
   },

@@ -124,6 +124,12 @@
           :step="intervalRange.step"
           @update:model-value="set({ interval: $event })"
         />
+        <SliderControl
+          label="Extent (km)"
+          :model-value="params.extentKm"
+          :min="2" :max="30" :step="1"
+          @update:model-value="set({ extentKm: $event })"
+        />
       </fieldset>
 
       <fieldset>
@@ -149,6 +155,18 @@
         />
       </fieldset>
 
+      <fieldset>
+        <legend>Label</legend>
+        <label class="toggle-row">
+          <input type="checkbox" :checked="params.showLabel" @change="set({ showLabel: $event.target.checked })" />
+          <span>Show mountain name</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" :checked="params.showElevation" @change="set({ showElevation: $event.target.checked })" />
+          <span>Show elevation</span>
+        </label>
+      </fieldset>
+
       <div class="btn-row">
         <button class="btn-primary" @click="emit('download')">Download SVG</button>
       </div>
@@ -171,6 +189,8 @@ const DEFAULT_LOCATION = {
   bbox: { south: 45.27, north: 45.47, west: -121.82, east: -121.57 },
   type: 'peak',
   category: 'natural',
+  state: 'Oregon',
+  country: 'United States',
 }
 
 const searchRowRef = ref(null)
@@ -423,6 +443,21 @@ legend {
 .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
 .seg-btn.active { background: var(--accent); color: var(--accent-fg); }
 .seg-btn:hover:not(.active) { background: var(--bg-seg-inactive-hover); }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.toggle-row input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 
 .btn-row { display: flex; gap: 8px; margin-top: 8px; }
 

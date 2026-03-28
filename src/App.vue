@@ -109,9 +109,12 @@ const moireParams = ref({
 const topoParams = ref({
   unit:               'ft',
   interval:           100,
+  extentKm:           10,
   rotation:           0,
   viewAngle:          30,
   heightExaggeration: 1.0,
+  showLabel:          true,
+  showElevation:      true,
   doc: { preset: 'letter-l', unit: 'in', w_mm: 279.4, h_mm: 215.9 },
 })
 const topoLocation = ref(null)
