@@ -5,7 +5,7 @@ A browser-based tool for generating plotter-ready SVG files for the [AxiDraw](ht
 <!-- Add a screenshot: save it to screenshots/preview.png, then uncomment the line below -->
 ![App preview](screenshots/preview.png)
 
-**[Live Demo](https://svg-generator-axidraw.vercel.app)**
+**[Live Demo](https://svg-plotter.spencer-russell.com)**
 
 ## Generation Modes
 
