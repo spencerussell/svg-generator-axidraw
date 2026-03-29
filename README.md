@@ -3,7 +3,7 @@
 A browser-based tool for generating plotter-ready SVG files for the [AxiDraw](https://www.axidraw.com/) pen plotter. Search for real-world locations to create topographic contour maps, or layer geometric patterns to produce moiré interference art — all exportable as print-ready SVGs with physical dimensions.
 
 <!-- Add a screenshot: save it to screenshots/preview.png, then uncomment the line below -->
-<!-- ![App preview](screenshots/preview.png) -->
+![App preview](screenshots/preview.png)
 
 **[Live Demo](https://svg-generator-axidraw.vercel.app)**
 
