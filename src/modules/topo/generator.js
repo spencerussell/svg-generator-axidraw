@@ -75,26 +75,130 @@ export function buildContourData(gridData, params) {
   const peakThreshold = summitElev - (summitElev - minElev) * 0.15
 
   const mountainRings = contourRings
-    .map(({ elevation, rings }) => ({
-      elevation,
-      rings: rings.filter(ring => {
+    .map(({ elevation, rings }) => {
+      const fullRings = []
+      const extraSegments = []
+
+      for (const ring of rings) {
+        // Mountain membership: non-peak rings must enclose the summit
+        const isMember = elevation >= peakThreshold || pointInPolygon(summitX, summitY, ring)
+        if (!isMember) continue
+
         // Distance check: every point must be within the extent radius
+        let allInside = true
+        let hasInside = false
         for (const [gx, gy] of ring) {
-          const dx = gx - summitX
-          const dy = gy - summitY
-          if (dx * dx + dy * dy > maxDistSq) return false
+          const dx = gx - summitX, dy = gy - summitY
+          if (dx * dx + dy * dy > maxDistSq) allInside = false
+          else hasInside = true
         }
-        // Summit enclosure check (skip near peak)
-        if (elevation < peakThreshold) {
-          return pointInPolygon(summitX, summitY, ring)
+
+        if (allInside) {
+          fullRings.push(ring)
+        } else if (hasInside) {
+          // Ring extends beyond extent — extract inside portions as
+          // stroke-only segments (no fill) so they don't interfere with
+          // the painter's algorithm but still fill contour gaps.
+          const segs = extractInsideSegments(ring, summitX, summitY, maxDistSq)
+          extraSegments.push(...segs)
         }
-        return true
-      }),
-    }))
-    .filter(({ rings }) => rings.length > 0)
+      }
+
+      return { elevation, rings: fullRings, extraSegments }
+    })
+    .filter(({ rings, extraSegments }) => rings.length > 0 || extraSegments.length > 0)
     .sort((a, b) => a.elevation - b.elevation)
 
   return { contourRings: mountainRings, minElev, maxElev }
+}
+
+// ---------------------------------------------------------------------------
+// Extract the portions of a contour ring that fall inside the extent circle.
+// Returns an array of open polyline segments (each an array of [x,y] points).
+// Used for rings that partially extend beyond the extent — the inside portions
+// are rendered as stroke-only paths (no fill) to avoid interfering with the
+// painter's algorithm while still showing contour detail near the boundary.
+// ---------------------------------------------------------------------------
+function extractInsideSegments(ring, cx, cy, rSq) {
+  const n = ring.length
+  if (n < 3) return []
+
+  const isInside = (p) => {
+    const dx = p[0] - cx, dy = p[1] - cy
+    return dx * dx + dy * dy <= rSq
+  }
+
+  const intersectEdge = (p1, p2) => {
+    const dx = p2[0] - p1[0], dy = p2[1] - p1[1]
+    const fx = p1[0] - cx, fy = p1[1] - cy
+    const a = dx * dx + dy * dy
+    if (a < 1e-12) return []
+    const b = 2 * (fx * dx + fy * dy)
+    const c = fx * fx + fy * fy - rSq
+    const disc = b * b - 4 * a * c
+    if (disc < 0) return []
+    const sq = Math.sqrt(disc)
+    const t1 = (-b - sq) / (2 * a)
+    const t2 = (-b + sq) / (2 * a)
+    const ts = []
+    if (t1 > 1e-8 && t1 < 1 - 1e-8) ts.push(t1)
+    if (t2 > 1e-8 && t2 < 1 - 1e-8 && Math.abs(t2 - t1) > 1e-8) ts.push(t2)
+    return ts
+  }
+
+  const lerp = (p1, p2, t) => [
+    p1[0] + t * (p2[0] - p1[0]),
+    p1[1] + t * (p2[1] - p1[1]),
+  ]
+
+  // Strip closing duplicate if present
+  const isClosed = ring[0][0] === ring[n - 1][0] && ring[0][1] === ring[n - 1][1]
+  const verts = isClosed ? ring.slice(0, -1) : ring
+  const m = verts.length
+  if (m < 2) return []
+
+  const segments = []
+  let current = null
+
+  for (let i = 0; i < m; i++) {
+    const curr = verts[i]
+    const next = verts[(i + 1) % m]
+    const cIn = isInside(curr)
+    const nIn = isInside(next)
+
+    if (cIn && nIn) {
+      if (!current) current = [curr]
+      current.push(next)
+    } else if (cIn && !nIn) {
+      if (!current) current = [curr]
+      const ts = intersectEdge(curr, next)
+      if (ts.length > 0) current.push(lerp(curr, next, ts[0]))
+      if (current.length >= 2) segments.push(current)
+      current = null
+    } else if (!cIn && nIn) {
+      current = []
+      const ts = intersectEdge(curr, next)
+      if (ts.length > 0) current.push(lerp(curr, next, ts[ts.length - 1]))
+      current.push(next)
+    } else {
+      // Both outside — edge may pass through circle
+      const ts = intersectEdge(curr, next)
+      if (ts.length >= 2) {
+        segments.push([lerp(curr, next, ts[0]), lerp(curr, next, ts[1])])
+      }
+    }
+  }
+
+  // Handle wrap-around for closed rings
+  if (current && current.length >= 2) {
+    if (segments.length > 0 && isInside(verts[0])) {
+      segments[0] = [...current, ...segments[0]]
+    } else {
+      segments.push(current)
+    }
+  }
+
+  return segments.filter(s => s.length >= 2)
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +226,7 @@ export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH, 
     const rx = x * Math.cos(rotRad) - y * Math.sin(rotRad)
     const ry = x * Math.sin(rotRad) + y * Math.cos(rotRad)
     const zPx = (elev / pixelSizeMeters) * hExag
-    return [rx, ry * Math.sin(vaRad) - zPx * Math.cos(vaRad)]
+    return [rx, ry * Math.sin(vaRad) - zPx * Math.cos(vaRad), ry]
   }
 
   function projectRing(ring, elev) {
@@ -130,9 +234,10 @@ export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH, 
   }
 
   // Project all rings (already filtered to mountain-only, sorted low→high)
-  const projectedRings = contourRings.map(({ elevation, rings }) => ({
+  const projectedRings = contourRings.map(({ elevation, rings, extraSegments }) => ({
     elevation,
     projected: rings.map(ring => projectRing(ring, elevation)),
+    extraProjected: (extraSegments || []).map(seg => projectRing(seg, elevation)),
   }))
 
   // Bounding box from all projected mountain rings, including Catmull-Rom
@@ -142,7 +247,7 @@ export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH, 
     if (x < minX) minX = x; if (x > maxX) maxX = x
     if (y < minY) minY = y; if (y > maxY) maxY = y
   }
-  for (const { projected } of projectedRings) {
+  for (const { projected, extraProjected } of projectedRings) {
     for (const pts of projected) {
       const n = pts.length
       if (n < 3) { for (const [x, y] of pts) expandBBox(x, y); continue }
@@ -172,6 +277,10 @@ export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH, 
         expandBBox(p1[0] + (p2[0] - p0[0]) * t1, p1[1] + (p2[1] - p0[1]) * t1)
         expandBBox(p2[0] - (p3[0] - p1[0]) * t2, p2[1] - (p3[1] - p1[1]) * t2)
       }
+    }
+    // Include extra stroke segments in the bounding box
+    for (const pts of extraProjected) {
+      for (const [x, y] of pts) expandBBox(x, y)
     }
   }
   // Include summit (may project slightly above highest contour ring)
@@ -283,20 +392,155 @@ export function renderTopoSVG(svgEl, contourData, gridData, params, svgW, svgH, 
     }
   }
 
-  // Draw rings lowest→highest elevation.
-  // White fill erases the far-side portion of each lower ring; black stroke
-  // draws the contour line. Near-side strokes remain exposed; far-side strokes
-  // get painted over by the next ring's fill.
-  for (const { projected } of projectedRings) {
+  // Smooth open-path variant using Catmull-Rom splines (same adaptive tension
+  // as ptsToPathD but for non-closed segments).
+  function ptsToOpenSmoothPathD(pts) {
+    if (pts.length < 2) return ''
+    const svgPts = pts.map(p => toSVG(p))
+    const n = svgPts.length
+    if (n === 2) {
+      return `M${svgPts[0][0].toFixed(1)},${svgPts[0][1].toFixed(1)}L${svgPts[1][0].toFixed(1)},${svgPts[1][1].toFixed(1)}`
+    }
+    let d = `M${svgPts[0][0].toFixed(1)},${svgPts[0][1].toFixed(1)}`
+    for (let i = 0; i < n - 1; i++) {
+      // Phantom endpoints: reflect across boundary for natural tangent
+      const p0 = i > 0 ? svgPts[i - 1]
+        : [2 * svgPts[0][0] - svgPts[1][0], 2 * svgPts[0][1] - svgPts[1][1]]
+      const p1 = svgPts[i]
+      const p2 = svgPts[i + 1]
+      const p3 = i + 2 < n ? svgPts[i + 2]
+        : [2 * svgPts[n - 1][0] - svgPts[n - 2][0], 2 * svgPts[n - 1][1] - svgPts[n - 2][1]]
+
+      const v1x = p1[0] - p0[0], v1y = p1[1] - p0[1]
+      const v2x = p2[0] - p1[0], v2y = p2[1] - p1[1]
+      const dot = v1x * v2x + v1y * v2y
+      const m1 = Math.sqrt(v1x * v1x + v1y * v1y)
+      const m2 = Math.sqrt(v2x * v2x + v2y * v2y)
+      const cosA = (m1 > 0 && m2 > 0) ? dot / (m1 * m2) : 1
+      const t1 = (1 + Math.min(cosA, 1)) * 0.5 * (1 / 6)
+
+      const w1x = v2x, w1y = v2y
+      const w2x = p3[0] - p2[0], w2y = p3[1] - p2[1]
+      const dotB = w1x * w2x + w1y * w2y
+      const mw1 = Math.sqrt(w1x * w1x + w1y * w1y)
+      const mw2 = Math.sqrt(w2x * w2x + w2y * w2y)
+      const cosB = (mw1 > 0 && mw2 > 0) ? dotB / (mw1 * mw2) : 1
+      const t2 = (1 + Math.min(cosB, 1)) * 0.5 * (1 / 6)
+
+      const cp1x = p1[0] + (p2[0] - p0[0]) * t1
+      const cp1y = p1[1] + (p2[1] - p0[1]) * t1
+      const cp2x = p2[0] - (p3[0] - p1[0]) * t2
+      const cp2y = p2[1] - (p3[1] - p1[1]) * t2
+
+      d += `C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`
+    }
+    return d
+  }
+
+  // ---------------------------------------------------------------------------
+  // Extract near-side (viewer-facing) portions of a projected contour path.
+  // Each projected point is [screenX, screenY, ry] where ry is the rotated
+  // depth coordinate — positive ry = near side, negative = far side.
+  // Returns an array of open polyline segments on the viewer's side.
+  // ---------------------------------------------------------------------------
+  function extractVisibleSegments(pts, isClosed) {
+    const n = pts.length
+    if (n < 2) return []
+
+    // Strip closing duplicate for closed rings
+    let ring = pts
+    if (isClosed && n > 2) {
+      const f = pts[0], l = pts[n - 1]
+      if (Math.abs(f[0] - l[0]) < 0.001 && Math.abs(f[1] - l[1]) < 0.001) {
+        ring = pts.slice(0, -1)
+      }
+    }
+    const m = ring.length
+    if (m < 2) return []
+
+    const isVis = p => p[2] >= 0
+    const interp = (a, b) => {
+      const t = -a[2] / (b[2] - a[2])
+      return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), 0]
+    }
+
+    const segments = []
+    let current = null
+    const limit = isClosed ? m : m - 1
+
+    for (let i = 0; i < limit; i++) {
+      const p = ring[i]
+      const q = ring[isClosed ? (i + 1) % m : i + 1]
+      const pV = isVis(p), qV = isVis(q)
+
+      if (pV && qV) {
+        if (!current) current = [p]
+        current.push(q)
+      } else if (pV && !qV) {
+        if (!current) current = [p]
+        current.push(interp(p, q))
+        segments.push(current)
+        current = null
+      } else if (!pV && qV) {
+        current = [interp(p, q), q]
+      }
+    }
+
+    if (!isClosed && current && current.length >= 2) {
+      segments.push(current)
+    }
+    if (isClosed && current && current.length >= 2) {
+      if (segments.length > 0 && isVis(ring[0])) {
+        segments[0] = [...current, ...segments[0].slice(1)]
+      } else {
+        segments.push(current)
+      }
+    }
+
+    return segments.filter(s => s.length >= 2)
+  }
+
+  // Draw rings lowest→highest elevation (painter's algorithm).
+  // White fill erases the far-side of each lower ring.  Strokes are only
+  // drawn on the near side (ry ≥ 0) so that back-side contour lines never
+  // appear through gaps between ridges on the viewer's side.
+  for (const { projected, extraProjected } of projectedRings) {
+    // Full-ring white fill for occlusion (painter's algorithm)
     for (const pts of projected) {
       if (pts.length < 2) continue
-      const path = document.createElementNS(NS, 'path')
-      path.setAttribute('d', ptsToPathD(pts))
-      path.setAttribute('fill', '#fff')
-      path.setAttribute('stroke', '#000')
-      path.setAttribute('stroke-width', '0.5')
-      path.setAttribute('stroke-linejoin', 'round')
-      g.appendChild(path)
+      const fill = document.createElementNS(NS, 'path')
+      fill.setAttribute('d', ptsToPathD(pts))
+      fill.setAttribute('fill', '#fff')
+      fill.setAttribute('stroke', 'none')
+      g.appendChild(fill)
+    }
+    // Near-side strokes only
+    for (const pts of projected) {
+      if (pts.length < 2) continue
+      const visSegs = extractVisibleSegments(pts, true)
+      for (const seg of visSegs) {
+        const path = document.createElementNS(NS, 'path')
+        path.setAttribute('d', ptsToOpenSmoothPathD(seg))
+        path.setAttribute('fill', 'none')
+        path.setAttribute('stroke', '#000')
+        path.setAttribute('stroke-width', '0.5')
+        path.setAttribute('stroke-linejoin', 'round')
+        g.appendChild(path)
+      }
+    }
+    // Extra stroke segments: also filter to near-side only
+    for (const pts of extraProjected) {
+      if (pts.length < 2) continue
+      const visSegs = extractVisibleSegments(pts, false)
+      for (const seg of visSegs) {
+        const path = document.createElementNS(NS, 'path')
+        path.setAttribute('d', ptsToOpenSmoothPathD(seg))
+        path.setAttribute('fill', 'none')
+        path.setAttribute('stroke', '#000')
+        path.setAttribute('stroke-width', '0.5')
+        path.setAttribute('stroke-linejoin', 'round')
+        g.appendChild(path)
+      }
     }
   }
 
