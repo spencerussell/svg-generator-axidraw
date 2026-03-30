@@ -46,6 +46,35 @@ export async function fetchTerrariumTile(z, x, y) {
   return ctx.getImageData(0, 0, TILE_SIZE, TILE_SIZE)
 }
 
+/**
+ * Calculate the best zoom level for a given radius in km.
+ * Targets roughly 3-5 tiles across the radius for good resolution without excess fetching.
+ */
+export function zoomForRadius(lat, radiusKm) {
+  const metersPerTile = (z) => EARTH_CIRCUMFERENCE * Math.cos(lat * Math.PI / 180) / (2 ** z)
+  const targetMeters = radiusKm * 1000 * 2 // diameter
+  for (let z = 14; z >= 1; z--) {
+    const tilesAcross = targetMeters / metersPerTile(z)
+    if (tilesAcross <= 7) return z
+  }
+  return 1
+}
+
+/**
+ * Get tiles covering a radius (km) around a center point.
+ */
+export function getTilesForRadius(lat, lon, radiusKm, zoom) {
+  const dLat = (radiusKm / 111.32)
+  const dLon = (radiusKm / (111.32 * Math.cos(lat * Math.PI / 180)))
+  const bbox = {
+    north: lat + dLat,
+    south: lat - dLat,
+    east: lon + dLon,
+    west: lon - dLon,
+  }
+  return getBoundingTiles(lat, lon, bbox, zoom)
+}
+
 export function getBoundingTiles(lat, lon, bbox, zoom) {
   // Ensure at least ~minExpand degrees in each direction from center
   const minExpand = 0.12
@@ -119,5 +148,17 @@ export function stitchTiles(tileDataList, zoom) {
   const tileWidthMeters = EARTH_CIRCUMFERENCE * Math.cos(centerLat * Math.PI / 180) / (2 ** zoom)
   const pixelSizeMeters = tileWidthMeters / TILE_SIZE
 
-  return { grid, gridWidth, gridHeight, bounds, pixelSizeMeters }
+  // Find highest point → summit
+  let summitIdx = 0
+  let summitElev = -Infinity
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] > summitElev) { summitElev = grid[i]; summitIdx = i }
+  }
+
+  return {
+    grid, gridWidth, gridHeight, bounds, pixelSizeMeters,
+    summitX: summitIdx % gridWidth,
+    summitY: Math.floor(summitIdx / gridWidth),
+    summitElev,
+  }
 }

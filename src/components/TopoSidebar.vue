@@ -1,7 +1,7 @@
 <template>
   <aside class="sidebar" :class="{ open }">
     <h1>Topo SVG Generator</h1>
-    <div class="subtitle">Topographic contours for Axidraw pen plotter</div>
+    <div class="subtitle">Topographic contours sourced from AWS Terrain Tiles and OpenStreetMap</div>
 
     <!-- Location search -->
     <fieldset>
@@ -100,6 +100,44 @@
     <!-- Parameters (only when location is confirmed) -->
     <template v-if="confirmedLocation">
       <fieldset>
+        <legend>View</legend>
+        <div class="control">
+          <div class="control-header"><span>Projection</span></div>
+          <div class="seg-row">
+            <button
+              class="seg-btn"
+              :class="{ active: !params.useDepthBuffer }"
+              @click="set({ useDepthBuffer: false })"
+            >Frontal</button>
+            <button
+              class="seg-btn"
+              :class="{ active: params.useDepthBuffer }"
+              @click="set({ useDepthBuffer: true })"
+            >3D</button>
+          </div>
+        </div>
+        <SliderControl
+          label="Rotation (°)"
+          :model-value="params.rotation"
+          :min="0" :max="360" :step="1"
+          @update:model-value="set({ rotation: $event })"
+        />
+        <SliderControl
+          label="View Angle (°)"
+          :model-value="params.viewAngle"
+          :min="0" :max="90" :step="1"
+          @update:model-value="set({ viewAngle: $event })"
+        />
+        <SliderControl
+          label="Height Exaggeration"
+          :model-value="Math.round(params.heightExaggeration * 100)"
+          :min="100" :max="250" :step="10"
+          suffix="%"
+          @update:model-value="set({ heightExaggeration: $event / 100 })"
+        />
+      </fieldset>
+
+      <fieldset>
         <legend>Contours</legend>
         <div class="control">
           <div class="control-header"><span>Unit</span></div>
@@ -125,33 +163,16 @@
           @update:model-value="set({ interval: $event })"
         />
         <SliderControl
-          label="Extent (km)"
-          :model-value="params.extentKm"
-          :min="2" :max="30" :step="1"
-          @update:model-value="set({ extentKm: $event })"
-        />
-      </fieldset>
-
-      <fieldset>
-        <legend>View</legend>
-        <SliderControl
-          label="Rotation (°)"
-          :model-value="params.rotation"
-          :min="0" :max="360" :step="1"
-          @update:model-value="set({ rotation: $event })"
+          :label="params.unit === 'ft' ? 'Extent (mi)' : 'Extent (km)'"
+          :model-value="extentDisplay"
+          :min="extentRange.min" :max="extentRange.max" :step="extentRange.step"
+          @update:model-value="onExtentInput($event)"
         />
         <SliderControl
-          label="View Angle (°)"
-          :model-value="params.viewAngle"
-          :min="0" :max="90" :step="1"
-          @update:model-value="set({ viewAngle: $event })"
-        />
-        <SliderControl
-          label="Height Exaggeration"
-          :model-value="Math.round(params.heightExaggeration * 100)"
-          :min="100" :max="250" :step="10"
-          suffix="%"
-          @update:model-value="set({ heightExaggeration: $event / 100 })"
+          :label="params.unit === 'ft' ? 'Base Clip (ft)' : 'Base Clip (m)'"
+          :model-value="baseClipDisplay"
+          :min="baseClipRange.min" :max="baseClipRange.max" :step="baseClipRange.step"
+          @update:model-value="onBaseClipInput($event)"
         />
       </fieldset>
 
@@ -165,10 +186,35 @@
           <input type="checkbox" :checked="params.showElevation" @change="set({ showElevation: $event.target.checked })" />
           <span>Show elevation</span>
         </label>
+        <label class="toggle-row">
+          <input type="checkbox" :checked="params.showState" @change="set({ showState: $event.target.checked })" />
+          <span>Show state</span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Pen</legend>
+        <div class="control">
+          <div class="control-header"><span>Pen Width</span></div>
+          <div class="row">
+            <select :value="penWidthPreset" @change="onPenWidthPreset($event.target.value)">
+              <option v-for="v in penWidthPresets" :key="v" :value="v">{{ v }} mm</option>
+              <option value="custom">Custom...</option>
+            </select>
+            <template v-if="penWidthPreset === 'custom'">
+              <input type="number" class="dim-input" style="width:72px"
+                min="0.01" max="10" step="0.01"
+                :value="params.strokeWidth"
+                @input="onCustomPenWidth($event)" />
+              <span class="dim-label" style="align-self:center;margin:0">mm</span>
+            </template>
+          </div>
+        </div>
       </fieldset>
 
       <div class="btn-row">
-        <button class="btn-primary" @click="emit('download')">Download SVG</button>
+        <button class="btn-primary" @click="emit('download')">Export SVG</button>
+        <button class="btn-primary" @click="emit('downloadPdf')">Export PDF</button>
       </div>
     </template>
   </aside>
@@ -211,7 +257,7 @@ const props = defineProps({
   open:   { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:params', 'update:location', 'download'])
+const emit = defineEmits(['update:params', 'update:location', 'download', 'downloadPdf'])
 
 // ---- Search state ----
 const searchQuery    = ref('')
@@ -314,9 +360,56 @@ function setUnit(unit) {
 
 const intervalRange = computed(() =>
   props.params.unit === 'ft'
-    ? { min: 20, max: 500, step: 20 }
-    : { min: 5,  max: 200, step: 5  },
+    ? { min: 20, max: 250, step: 10 }
+    : { min: 5,  max: 75,  step: 5  },
 )
+
+const KM_PER_MILE = 1.60934
+const FT_PER_M = 3.28084
+
+const extentDisplay = computed(() =>
+  props.params.unit === 'ft'
+    ? Math.round(props.params.extentKm / KM_PER_MILE)
+    : props.params.extentKm,
+)
+const extentRange = computed(() =>
+  props.params.unit === 'ft'
+    ? { min: 1, max: 20, step: 1 }
+    : { min: 2, max: 30, step: 1 },
+)
+function onExtentInput(val) {
+  const km = props.params.unit === 'ft' ? val * KM_PER_MILE : val
+  set({ extentKm: km })
+}
+
+const baseClipDisplay = computed(() => {
+  const m = props.params.baseClipElev ?? 0
+  return props.params.unit === 'ft' ? Math.round(m * FT_PER_M) : m
+})
+const baseClipRange = computed(() =>
+  props.params.unit === 'ft'
+    ? { min: 0, max: 13000, step: 100 }
+    : { min: 0, max: 4000,  step: 50  },
+)
+function onBaseClipInput(val) {
+  const m = props.params.unit === 'ft' ? val / FT_PER_M : val
+  set({ baseClipElev: m > 0 ? m : null })
+}
+
+// ---- Pen width helpers ----
+const penWidthPresets = [0.1, 0.2, 0.3, 0.4, 0.5, 0.8, 1.0, 2.0]
+const penWidthPreset = computed(() => {
+  const v = props.params.strokeWidth
+  return penWidthPresets.includes(v) ? v : 'custom'
+})
+function onPenWidthPreset(val) {
+  if (val === 'custom') return set({ strokeWidth: props.params.strokeWidth })
+  set({ strokeWidth: parseFloat(val) })
+}
+function onCustomPenWidth(e) {
+  const v = parseFloat(e.target.value)
+  if (v > 0) set({ strokeWidth: v })
+}
 </script>
 
 <style scoped>

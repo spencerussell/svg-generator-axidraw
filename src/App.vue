@@ -26,6 +26,7 @@
       @update:params="moireParams = $event"
       @update:saveParamsTxt="saveParamsTxt = $event"
       @download="onMoireDownload"
+      @download-pdf="onMoirePdfDownload"
       @randomize="onRandomize"
     />
 
@@ -36,6 +37,7 @@
       @update:params="topoParams = $event"
       @update:location="topoLocation = $event"
       @download="onTopoDownload"
+      @download-pdf="onTopoPdfDownload"
     />
   </div>
 
@@ -77,6 +79,7 @@ import TopoSidebar     from './components/TopoSidebar.vue'
 import TopoPreviewPane from './components/TopoPreviewPane.vue'
 import { exportSVG, paramsToText } from './modules/moire/generator.js'
 import { exportTopoSVG }           from './modules/topo/generator.js'
+import { svgToPdf }                from './lib/pdfExport.js'
 
 const mode = ref('topo')
 
@@ -110,11 +113,15 @@ const topoParams = ref({
   unit:               'ft',
   interval:           100,
   extentKm:           10,
+  baseClipElev:       null,
   rotation:           0,
   viewAngle:          30,
   heightExaggeration: 1.0,
+  useDepthBuffer:     true,
+  strokeWidth:        0.5,
   showLabel:          true,
   showElevation:      true,
+  showState:          false,
   doc: { preset: 'letter-l', unit: 'in', w_mm: 279.4, h_mm: 215.9 },
 })
 const topoLocation = ref(null)
@@ -139,6 +146,15 @@ function onMoireDownload() {
   }
 }
 
+// ---- Moiré PDF download ----
+async function onMoirePdfDownload() {
+  const svgEl = moirePreviewRef.value?.svgEl
+  if (!svgEl) return
+  const { w_mm, h_mm } = moireParams.value.doc
+  const blob = await svgToPdf(svgEl, w_mm, h_mm)
+  triggerDownload(`moire-axidraw-${Date.now()}.pdf`, blob)
+}
+
 // ---- Topo download ----
 function onTopoDownload() {
   const svgEl = topoPreviewRef.value?.svgEl
@@ -147,6 +163,15 @@ function onTopoDownload() {
   const source   = exportTopoSVG(svgEl, w_mm, h_mm)
   const basename = `topo-axidraw-${Date.now()}`
   triggerDownload(`${basename}.svg`, new Blob([source], { type: 'image/svg+xml;charset=utf-8' }))
+}
+
+// ---- Topo PDF download ----
+async function onTopoPdfDownload() {
+  const svgEl = topoPreviewRef.value?.svgEl
+  if (!svgEl) return
+  const { w_mm, h_mm } = topoParams.value.doc
+  const blob = await svgToPdf(svgEl, w_mm, h_mm)
+  triggerDownload(`topo-axidraw-${Date.now()}.pdf`, blob)
 }
 
 function triggerDownload(filename, blob) {

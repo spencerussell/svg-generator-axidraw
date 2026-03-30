@@ -1,3 +1,7 @@
+## Architecture Reference
+
+Read ARCHITECTURE.md before making any changes to the contour pipeline. It describes the full 3D DEM-based pipeline (Acquire → Mesh → Slice → Project → Occlude → SVG) that replaces the old raster contour tracing approach.
+
 # SVG Generator for AxiDraw
 
 A Vue 3 + Vite web app that generates plotter-ready SVG files for the AxiDraw pen plotter. Features multiple generation modes:

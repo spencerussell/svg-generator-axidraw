@@ -194,8 +194,11 @@
 
     <!-- Actions -->
     <div class="btn-row">
-      <button class="btn-primary" @click="emit('download')">Download SVG</button>
       <button class="btn-secondary" @click="emit('randomize')">Randomize</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" @click="emit('download')">Export SVG</button>
+      <button class="btn-primary" @click="emit('downloadPdf')">Export PDF</button>
     </div>
     <div class="check-row">
       <input type="checkbox" id="saveParamsTxt" :checked="saveParamsTxt" @change="emit('update:saveParamsTxt', $event.target.checked)" />
@@ -229,6 +232,7 @@ const emit = defineEmits([
   'update:params',
   'update:saveParamsTxt',
   'download',
+  'downloadPdf',
   'randomize',
 ])
 
